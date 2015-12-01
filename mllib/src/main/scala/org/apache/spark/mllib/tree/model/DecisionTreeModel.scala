@@ -33,6 +33,13 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.util.Utils
+import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.impl._
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.model._
 
 /**
  * Decision tree model for classification or regression.
@@ -45,6 +52,8 @@ class DecisionTreeModel @Since("1.0.0") (
     @Since("1.0.0") val topNode: Node,
     @Since("1.0.0") val algo: Algo) extends Serializable with Saveable {
 
+  @Since("1.0.0") var buildingStrategy : Option[Strategy] = None
+
   /**
    * Predict values for a single data point using the model trained.
    *
@@ -54,6 +63,11 @@ class DecisionTreeModel @Since("1.0.0") (
   @Since("1.0.0")
   def predict(features: Vector): Double = {
     topNode.predict(features)
+  }
+
+  @Since("1.0.0")
+  def predict(features: Vector, setOfLeaves: Set[Int] = Set[Int]()): Double = {
+    topNode.predict(features, setOfLeaves)
   }
 
   /**

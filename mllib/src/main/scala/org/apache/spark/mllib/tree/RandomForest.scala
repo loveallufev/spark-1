@@ -219,11 +219,18 @@ private class RandomForest (
     val topNodes: Array[Node] = Array.fill[Node](numTrees)(Node.emptyNode(nodeIndex = 1))
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
 
+    val format = new java.text.SimpleDateFormat("MM/dd/yy H:mm:ss")
+
+    var i : Int = 0
     while (nodeQueue.nonEmpty) {
+      i = i + 1
+      val startTime = format.format(new java.util.Date())
+      println("[MLLIB-INFO] StartTime of iteration %d:%s".format(i,startTime))
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
-        RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
+        RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage,
+          metadata, rng, strategy.nodeSelectionStrategy)
       // Sanity check (should never occur):
       assert(nodesForGroup.size > 0,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
@@ -233,6 +240,8 @@ private class RandomForest (
       DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
         treeToNodeToIndexInfo, splits, bins, nodeQueue, timer, nodeIdCache = nodeIdCache)
       timer.stop("findBestSplits")
+      val endTime = format.format(new java.util.Date())
+      println("[MLLIB-INFO] EndTime of iteration %d:%s".format(i, endTime))
     }
 
     baggedInput.unpersist()
@@ -468,7 +477,9 @@ object RandomForest extends Serializable with Logging {
       nodeQueue: mutable.Queue[(Int, Node)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
-      rng: scala.util.Random): (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
+      rng: scala.util.Random,
+      nodeSelectionStrategy : String = "HYBRID"):
+       (Map[Int, Array[Node]], Map[Int, Map[Int, NodeIndexInfo]]) = {
     // Collect some nodes to split:
     //  nodesForGroup(treeIndex) = nodes to split
     val mutableNodesForGroup = new mutable.HashMap[Int, mutable.ArrayBuffer[Node]]()
@@ -476,7 +487,17 @@ object RandomForest extends Serializable with Logging {
       new mutable.HashMap[Int, mutable.HashMap[Int, NodeIndexInfo]]()
     var memUsage: Long = 0L
     var numNodesInGroup = 0
-    while (nodeQueue.nonEmpty && memUsage < maxMemoryUsage) {
+    val totalNodes = nodeQueue.length
+    var nonStop = nodeQueue.nonEmpty
+    if (nodeSelectionStrategy == "HYBRID"){
+      nonStop = nodeQueue.nonEmpty && memUsage < maxMemoryUsage
+    }
+    else if (nodeSelectionStrategy == "BFS"){
+      nonStop = nodeQueue.nonEmpty
+    }
+
+    var validNode = false
+    while (nonStop) {
       val (treeIndex, node) = nodeQueue.head
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
@@ -487,19 +508,45 @@ object RandomForest extends Serializable with Logging {
       }
       // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
-      if (memUsage + nodeMemUsage <= maxMemoryUsage) {
+      validNode = false
+
+      if (nodeSelectionStrategy == "HYBRID"){
+        validNode = memUsage + nodeMemUsage <= maxMemoryUsage
+              }
+      else if (nodeSelectionStrategy == "BFS"){
+        validNode = true
+      }
+
+     // print("use '%s' to select node group".format(nodeSelectionStrategy))
+
+      if (validNode) {
         nodeQueue.dequeue()
+        //logDebug("Dequeue node:" + node.id)
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[Node]()) += node
         mutableTreeToNodeToIndexInfo
           .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, NodeIndexInfo]())(node.id)
           = new NodeIndexInfo(numNodesInGroup, featureSubset)
+//        if (memUsage + nodeMemUsage > maxMemoryUsage) {
+//            println("[MLLIB-INFO] maxMemoryUsage: %s current memory usage: %s".format(
+//              maxMemoryUsage, memUsage + nodeMemUsage))
+//        }
+        //numNodesInGroup += 1
       }
       numNodesInGroup += 1
       memUsage += nodeMemUsage
+      nonStop = nodeQueue.nonEmpty && (memUsage < maxMemoryUsage)
+      //if (nodeSelectionStrategy == "HYBRID"){
+      //  nonStop = nodeQueue.nonEmpty && validNode
+      //}
+      //else if (nodeSelectionStrategy == "BFS"){
+      //  nonStop = nodeQueue.nonEmpty
+      //}
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[Node]] = mutableNodesForGroup.mapValues(_.toArray).toMap
     val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.mapValues(_.toMap).toMap
+    println("[MLLIB-INFO] Dequeue %d nodes out of %d nodes. %d nodes left".format(
+      numNodesInGroup, totalNodes, nodeQueue.length))
     (nodesForGroup, treeToNodeToIndexInfo)
   }
 

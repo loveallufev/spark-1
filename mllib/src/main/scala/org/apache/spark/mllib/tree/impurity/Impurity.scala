@@ -153,6 +153,8 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
    */
   def predict: Double
 
+  def risk : Double
+
   /**
    * Probability of the label given by [[predict]], or -1 if no probability is available.
    */

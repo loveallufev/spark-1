@@ -49,7 +49,12 @@ class Node @Since("1.2.0") (
     @Since("1.0.0") var split: Option[Split],
     @Since("1.0.0") var leftNode: Option[Node],
     @Since("1.0.0") var rightNode: Option[Node],
-    @Since("1.0.0") var stats: Option[InformationGainStats]) extends Serializable with Logging {
+    @Since("1.0.0") var stats: Option[InformationGainStats],
+    @Since("1.0.0") var risk : Double = 0,
+    @Since("1.0.0") var branchRisk : Double = Double.MaxValue,
+    @Since("1.0.0") var numLeafNodes : Int = 0) extends Serializable with Logging {
+
+  var parent : Option[Node] = None
 
   override def toString: String = {
     s"id = $id, isLeaf = $isLeaf, predict = $predict, impurity = $impurity, " +
@@ -83,21 +88,21 @@ class Node @Since("1.2.0") (
    * @return predicted value
    */
   @Since("1.1.0")
-  def predict(features: Vector) : Double = {
-    if (isLeaf) {
+  def predict(features: Vector, setOfLeaves : Set[Int] = Set[Int]()) : Double = {
+    if (isLeaf || setOfLeaves.contains(id)) {
       predict.predict
     } else {
       if (split.get.featureType == Continuous) {
         if (features(split.get.feature) <= split.get.threshold) {
-          leftNode.get.predict(features)
+          leftNode.get.predict(features, setOfLeaves)
         } else {
-          rightNode.get.predict(features)
+          rightNode.get.predict(features, setOfLeaves)
         }
       } else {
         if (split.get.categories.contains(features(split.get.feature))) {
           leftNode.get.predict(features)
         } else {
-          rightNode.get.predict(features)
+          rightNode.get.predict(features, setOfLeaves)
         }
       }
     }
@@ -117,7 +122,8 @@ class Node @Since("1.2.0") (
     } else {
       Some(rightNode.get.deepCopy())
     }
-    new Node(id, predict, impurity, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
+    new Node(id, predict, impurity, isLeaf, split, leftNodeCopy, rightNodeCopy, stats,
+      risk, branchRisk, numLeafNodes)
   }
 
   /**
@@ -263,6 +269,30 @@ private[spark] object Node {
       levelsToGo -= 1
     }
     tmpNode
+  }
+
+  /**
+   * A node is valid if its parent is not a leaf node (numLeafNodes > 1)
+   * @param nodeIndex
+   * @param rootNode
+   * @return
+   */
+  def getNodeAndCheckIfIsAvailable(nodeIndex : Int, rootNode : Node) : (Boolean, Node) = {
+    var tmpNode: Node = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    var valid = true
+    while (levelsToGo > 0) {
+      if (tmpNode.numLeafNodes <= 1) {
+        valid = false
+      }
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftNode.get
+      } else {
+        tmpNode = tmpNode.rightNode.get
+      }
+      levelsToGo -= 1
+    }
+    (valid, tmpNode)
   }
 
 }

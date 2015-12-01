@@ -148,6 +148,8 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
     indexOfLargestArrayElement(stats)
   }
 
+  def risk : Double = 1 - prob(predict)
+
   /**
    * Probability of the label given by [[predict]].
    */

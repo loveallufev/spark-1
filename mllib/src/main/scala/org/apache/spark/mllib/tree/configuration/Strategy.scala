@@ -80,7 +80,9 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
-    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
+    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
+    @Since("1.2.0") @BeanProperty var nodeSelectionStrategy : String = "HYBRID"
+                               ) extends Serializable {
 
   /**
    */
@@ -118,6 +120,11 @@ class Strategy @Since("1.3.0") (
   def setAlgo(algo: String): Unit = algo match {
     case "Classification" => setAlgo(Classification)
     case "Regression" => setAlgo(Regression)
+  }
+
+  @Since("1.2.0")
+  def setNodeSelectionStrategy1(st : String) : Unit = {
+    this.nodeSelectionStrategy = st
   }
 
   /**

@@ -64,11 +64,11 @@ private[spark] object BaggedPoint {
     if (withReplacement) {
       convertToBaggedRDDSamplingWithReplacement(input, subsamplingRate, numSubsamples, seed)
     } else {
-      if (numSubsamples == 1 && subsamplingRate == 1.0) {
-        convertToBaggedRDDWithoutSampling(input)
-      } else {
+      //if (numSubsamples == 1 && subsamplingRate == 1.0) {
+      //  convertToBaggedRDDWithoutSampling(input)
+      //} else {
         convertToBaggedRDDSamplingWithoutReplacement(input, subsamplingRate, numSubsamples, seed)
-      }
+      //}
     }
   }
 

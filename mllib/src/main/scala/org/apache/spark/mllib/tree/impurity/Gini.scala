@@ -144,6 +144,8 @@ private[spark] class GiniCalculator(stats: Array[Double]) extends ImpurityCalcul
     indexOfLargestArrayElement(stats)
   }
 
+  def risk : Double = 1 - prob(predict)
+
   /**
    * Probability of the label given by [[predict]].
    */
